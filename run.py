@@ -5,22 +5,19 @@ from train import train_loop, test_loop
 from data_loader import DocRED
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
-device = torch.device("cuda:0")
+device = torch.device("cpu")
 epochs = 30
-batch_size = 5
+batch_size = 2
 
-loss_fn = balanced_loss()
-loss_fn.to(device)
+train_data = DocRED("dataset/train_annotated.json")
+test_data = DocRED("dataset/dev.json")
 
-training_data = DocRED("dataset/train_annotated.json")
-train_size = int(0.8 * len(training_data))
-test_size = len(training_data) - train_size
-train_data, test_data = torch.utils.data.random_split(training_data, [train_size, test_size])
+train_dataloader = DataLoader(train_data, batch_size=batch_size,
+                              shuffle=True, collate_fn=train_data.custom_collate_fn)
+test_dataloader = DataLoader(test_data, batch_size=batch_size,
+                             shuffle=True, collate_fn=test_data.custom_collate_fn)
 
-train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
-test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=True)
-
-model = Model()
+model = Model(train_data.get_token_embedding(),device=device)
 model.to(device)
 
 #####
@@ -46,6 +43,6 @@ scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_s
 
 for t in range(epochs):
     print(f"Epoch {t + 1}\n-------------------------------")
-    train_loop(train_dataloader, model, loss_fn, optimizer, scheduler)
-    test_loop(test_dataloader, model, loss_fn)
+    train_loop(train_dataloader, model, optimizer, scheduler)
+    test_loop(test_dataloader, model)
 print("Done!")
