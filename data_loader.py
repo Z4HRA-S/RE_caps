@@ -26,6 +26,7 @@ class DocRED(Dataset):
     def __read_data__(self, data_dir: "str"):
         with open(data_dir, "r") as file:
             data = json.loads(file.read())
+        data = [d for d in data if len(d["labels"]) > 0]
         rel2id_dir = "/".join(data_dir.split("/")[:-1] + ["rel2id.json"])
         with open(rel2id_dir, "r") as file:
             rel2id = json.loads(file.read())
