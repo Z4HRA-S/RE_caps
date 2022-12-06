@@ -6,7 +6,7 @@ def train_loop(dataloader, model, optimizer, scheduler):
     for batch, data in enumerate(dataloader):
         # Compute prediction and loss
         loss, masked, labels = model(data)
-        f1 = 0
+        f1 = model.f1_measure(masked,labels)
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
 
         # Backpropagation
@@ -25,6 +25,6 @@ def test_loop(dataloader, model):
         for data in dataloader:
             output, reconstructions, masked, labels = model(data)
             loss = model.caps_net.loss(data, output, labels, reconstructions)
-            f1 = 0
+            f1 = model.f1_measure(masked,labels)
 
     print(f"Test Error: \n F1: {(f1):>7f},  loss: {loss:>8f} \n")
