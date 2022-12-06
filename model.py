@@ -95,4 +95,3 @@ class Model(nn.Module):
         epsilon = torch.zeros_like(tp) + 1e-10
         f1 = tp / (tp + (fn_fp / 2) + epsilon)
         return f1.mean()
-
