@@ -6,7 +6,7 @@ from data_loader import DocRED
 
 device = torch.device("cpu")
 epochs = 30
-batch_size = 3
+batch_size = 2
 
 train_data = DocRED("dataset/train_annotated.json")
 test_data = DocRED("dataset/dev.json")
@@ -27,6 +27,7 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True, 
 
 for t in range(epochs):
     print(f"Epoch {t + 1}\n-------------------------------")
-    train_loop(train_dataloader, model, optimizer, scheduler)
-    test_loop(test_dataloader, model)
+    train_loop(train_dataloader, model, optimizer)
+    test_loss=test_loop(test_dataloader, model)
+    scheduler.step(test_loss)
 print("Done!")
