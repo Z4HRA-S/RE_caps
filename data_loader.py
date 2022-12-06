@@ -58,9 +58,10 @@ class DocRED(Dataset):
         input_ids = torch.squeeze(tokenized_doc["input_ids"], 1)
         attention_mask = torch.squeeze(tokenized_doc["attention_mask"], 1)
         vertexSet = [[mnt["pos"] for mnt in ent] for ent in doc["vertexSet"]]
-        labels = {(triple["h"], triple["t"]): [] for triple in doc["labels"]}
+        labels = torch.zeros(len(vertexSet), len(vertexSet), 96)
         for triple in doc["labels"]:
-            labels[(triple["h"], triple["t"])].append(self.rel2id[triple["r"]])
+            i, j, k = triple["h"], triple["t"], self.rel2id[triple["r"]]
+            labels[i][j][k] = 1
 
         processed_doc = {
             "input_ids": input_ids,
