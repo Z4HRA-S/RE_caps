@@ -2,7 +2,6 @@ import torch
 import transformers as ppb
 from torch import nn
 from itertools import product
-from collections import Counter
 from caps_net import CapsNet
 
 
@@ -17,8 +16,8 @@ class Model(nn.Module):
         self.device = device
 
     def forward(self, x):
-        input_ids = x["input_ids"]
-        attention_mask = x["attention_mask"]
+        input_ids = x["input_ids"].to(self.device)
+        attention_mask = x["attention_mask"].to(self.device)
 
         embedded_doc = self.embedding_model(
             input_ids=input_ids,
@@ -26,23 +25,23 @@ class Model(nn.Module):
             output_attentions=True)
 
         feature_set, labels = self.extract_feature(embedded_doc, x)
-        output = [self.caps_net(feature_set[i:i + 20]) for i in range(0, len(feature_set), 20)]
-        output = torch.concat(output, dim=0)
-        output = torch.flatten(output, 1, -1)
-        output = nn.Linear(output.size()[1], 96, device=self.device)(output)
-        output = nn.LeakyReLU()(output)
-        output = nn.Linear(96, 96, device=self.device)(output)
-        output = nn.Sigmoid()(output)
-        return output
+        # output = [self.caps_net(feature_set[i:i + 20]) for i in range(0, len(feature_set), 20)]
+        output, reconstructions, pred = self.caps_net(feature_set)
+        loss = self.caps_net.loss(feature_set, output, labels, reconstructions)
+
+        return loss, pred, labels
 
     def extract_feature(self, embedded_doc, x):
-        entity_list = self.aggregate_entities(x["entity_list"], embedded_doc.last_hidden_state)
+        entities = x["entity_list"]
+        entity_list = self.aggregate_entities(entities, embedded_doc.last_hidden_state)
         cls_tokens = embedded_doc.last_hidden_state[:, 0]
 
         feature_set = []
         labels = []
         for i, entities_embedding in enumerate(entity_list):
-            all_possible_ent_pair = self.all_possible_pair(len(entities_embedding))
+            label = x["label"][i].to(self.device)
+            # all_possible_ent_pair = self.all_possible_pair(len(entities_embedding))
+            all_possible_ent_pair = self.labeled_pair(label)
             feature_set.extend(
                 [
                     torch.stack([
@@ -53,10 +52,9 @@ class Model(nn.Module):
                     for h, t in all_possible_ent_pair]
             )
 
-            label = x["label"][i]
-            labels.extend([label.get(ent) if ent in label else [0] for ent in all_possible_ent_pair])
-        feature_set = torch.stack(feature_set)
-        # labels = torch.Tensor(labels)
+            labels.extend([label[i][j] for i, j in all_possible_ent_pair])
+        feature_set = torch.stack(feature_set).to(self.device)
+        labels = torch.stack(labels)
         return feature_set, labels
 
     def all_possible_pair(self, num_ent: int):
@@ -65,6 +63,11 @@ class Model(nn.Module):
                    product(range(num_ent),
                            range(num_ent)))
         )
+
+    def labeled_pair(self, labels):
+        num_ent = labels.size()[0]
+        labeled = [(i, j) for i in range(num_ent) for j in range(num_ent) if torch.sum(labels[i][j]) > 0]
+        return labeled
 
     def aggregate_entities(self, vertexSet_list: list,
                            embedded_doc_list: torch.Tensor) -> list:
@@ -85,3 +88,11 @@ class Model(nn.Module):
             doc = torch.stack(doc)
             batch.append(doc)
         return batch
+
+    def f1_measure(self, pred, labels):
+        tp = torch.sum(torch.logical_and(pred, labels).float())
+        fn_fp = torch.sum(torch.logical_xor(pred, labels).float())
+        epsilon = torch.zeros_like(tp) + 1e-10
+        f1 = tp / (tp + (fn_fp / 2) + epsilon)
+        return f1.mean()
+
