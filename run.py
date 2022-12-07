@@ -7,12 +7,12 @@ from data_loader import DocRED
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("epoch", default="30", type=int)
-    parser.add_argument("lr", default="0.01", type=float)
-    parser.add_argument("batch-size", default="3", type=int)
-    parser.add_argument("num_class", default="96", type=int)
-    parser.add_argument("device", default="cpu", type=str)
-    args = parser.parse_args()
+    parser.add_argument("--epoch", default="30", type=int)
+    parser.add_argument("--lr", default="0.01", type=float)
+    parser.add_argument("--batch-size", default="3", type=int)
+    parser.add_argument("--num_class", default="96", type=int)
+    parser.add_argument("--device", default="cpu", type=str)
+    args = parser.parse_args([] if "__file__" not in globals() else None)
 
     device = torch.device(args.device)
 
