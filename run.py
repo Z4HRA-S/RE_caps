@@ -1,33 +1,40 @@
 from torch.utils.data import DataLoader
 import torch
+import argparse
 from model import Model
 from train import train_loop, test_loop
 from data_loader import DocRED
 
-device = torch.device("cpu")
-epochs = 30
-batch_size = 2
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("epoch", default="30", type=int)
+    parser.add_argument("lr", default="0.01", type=float)
+    parser.add_argument("batch-size", default="3", type=int)
+    parser.add_argument("num_class", default="96", type=int)
+    parser.add_argument("device", default="cpu", type=str)
+    args = parser.parse_args()
 
-train_data = DocRED("dataset/train_annotated.json")
-test_data = DocRED("dataset/dev.json")
+    device = torch.device(args.device)
 
-train_dataloader = DataLoader(train_data, batch_size=batch_size,
-                              shuffle=True, collate_fn=train_data.custom_collate_fn)
-test_dataloader = DataLoader(test_data, batch_size=batch_size,
-                             shuffle=True, collate_fn=test_data.custom_collate_fn)
+    train_data = DocRED("dataset/train_annotated.json", args.num_class)
+    test_data = DocRED("dataset/dev.json", args.num_class)
 
-model = Model(train_data.get_token_embedding(),device=device)
-model.to(device)
+    train_dataloader = DataLoader(train_data, batch_size=args.batch_size,
+                                  shuffle=True, collate_fn=train_data.custom_collate_fn)
+    test_dataloader = DataLoader(test_data, batch_size=args.batch_size,
+                                 shuffle=True, collate_fn=test_data.custom_collate_fn)
 
-#####
-learning_rate = 1e-3
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True, patience=15, min_lr=1e-6)
-#####
+    model = Model(train_data.get_token_embedding(), num_class=args.num_class, device=device)
+    model.to(device)
 
-for t in range(epochs):
-    print(f"Epoch {t + 1}\n-------------------------------")
-    train_loop(train_dataloader, model, optimizer)
-    test_loss=test_loop(test_dataloader, model)
-    scheduler.step(test_loss)
-print("Done!")
+    #####
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True, patience=15, min_lr=1e-6)
+    #####
+
+    for t in range(args.epoch):
+        print(f"Epoch {t + 1}\n-------------------------------")
+        train_loop(train_dataloader, model, optimizer)
+        test_loss = test_loop(test_dataloader, model)
+        scheduler.step(test_loss)
+    print("Done!")
