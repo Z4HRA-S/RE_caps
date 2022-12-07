@@ -11,7 +11,8 @@ max_lbl = 151
 
 
 class DocRED(Dataset):
-    def __init__(self, data_path):
+    def __init__(self, data_path, num_class):
+        self.num_class = num_class
         tokenizer_class, pretrained_weights = (ppb.BertTokenizer,
                                                'bert-base-uncased')
         self.tokenizer = tokenizer_class.from_pretrained(pretrained_weights,
@@ -26,7 +27,8 @@ class DocRED(Dataset):
     def __read_data__(self, data_dir: "str"):
         with open(data_dir, "r") as file:
             data = json.loads(file.read())
-        data = [d for d in data if len(d["labels"]) > 0]
+        if self.num_class == 95:
+            data = [d for d in data if len(d["labels"]) > 0]
         rel2id_dir = "/".join(data_dir.split("/")[:-1] + ["rel2id.json"])
         with open(rel2id_dir, "r") as file:
             rel2id = json.loads(file.read())
@@ -59,9 +61,17 @@ class DocRED(Dataset):
         input_ids = torch.squeeze(tokenized_doc["input_ids"], 1)
         attention_mask = torch.squeeze(tokenized_doc["attention_mask"], 1)
         vertexSet = [[mnt["pos"] for mnt in ent] for ent in doc["vertexSet"]]
-        labels = torch.zeros(len(vertexSet), len(vertexSet), 96)
+
+        labels = torch.zeros(len(vertexSet), len(vertexSet), self.num_class)
+        if self.num_class == 96:
+            labels[:, :, 0] = 1
+
         for triple in doc["labels"]:
             i, j, k = triple["h"], triple["t"], self.rel2id[triple["r"]]
+            if self.num_class == 96:
+                labels[i][j][0] = 0
+            if self.num_class == 95:
+                k = max(0, k - 1)
             labels[i][j][k] = 1
 
         processed_doc = {
