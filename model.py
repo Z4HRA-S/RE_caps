@@ -6,14 +6,16 @@ from caps_net import CapsNet
 
 
 class Model(nn.Module):
-    def __init__(self, len_tokenizer, device):
+    def __init__(self, len_tokenizer, num_class, device):
+        self.num_class = num_class
         super(Model, self).__init__()
         self.embedding_model = ppb.BertModel.from_pretrained("bert-base-uncased")
         self.embedding_model.resize_token_embeddings(len_tokenizer)
         self.embedding_model.to(device)
-        self.caps_net = CapsNet()
+        self.caps_net = CapsNet(num_class=num_class, device=device)
         self.caps_net.to(device)
         self.device = device
+
 
     def forward(self, x):
         input_ids = x["input_ids"].to(self.device)
@@ -38,10 +40,15 @@ class Model(nn.Module):
 
         feature_set = []
         labels = []
+
         for i, entities_embedding in enumerate(entity_list):
             label = x["label"][i].to(self.device)
-            # all_possible_ent_pair = self.all_possible_pair(len(entities_embedding))
-            all_possible_ent_pair = self.labeled_pair(label)
+            if self.num_class == 96:
+                all_possible_ent_pair = self.all_possible_pair(len(entities_embedding))
+
+            if self.num_class == 95:
+                all_possible_ent_pair = self.labeled_pair(label)
+
             feature_set.extend(
                 [
                     torch.stack([
