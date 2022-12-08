@@ -33,14 +33,14 @@ class ConvLayer(nn.Module):
 
 
 class PrimaryCaps(nn.Module):
-    def __init__(self, num_capsules=12, in_channels=256, out_channels=32, kernel_size=9):
+    def __init__(self, num_capsules=12, in_channels=256, out_channels=16, kernel_size=12):
         super(PrimaryCaps, self).__init__()
         capsule = torch.nn.Sequential(
             torch.nn.Conv1d(in_channels=in_channels, out_channels=out_channels,
                             kernel_size=1, stride=1, padding=0),
             torch.nn.ReLU(),
             torch.nn.Conv1d(in_channels=out_channels, out_channels=out_channels,
-                            kernel_size=kernel_size, stride=2, padding=0)
+                            kernel_size=kernel_size, stride=3, padding=0)
         )
         self.capsules = nn.ModuleList([
             # nn.Conv1d(in_channels=in_channels, out_channels=out_channels,
@@ -51,7 +51,7 @@ class PrimaryCaps(nn.Module):
     def forward(self, x):
         u = [capsule(x) for capsule in self.capsules]
         u = torch.stack(u, dim=1)
-        u = u.view(x.size(0), 32 * 72, -1)
+        u = u.view(x.size(0), 16 * 47, -1)
         u = self.squash(u)
         return u
 
@@ -62,7 +62,7 @@ class PrimaryCaps(nn.Module):
 
 
 class DigitCaps(nn.Module):
-    def __init__(self, device, num_capsules=96, num_routes=32 * 72, in_channels=12, out_channels=16):
+    def __init__(self, device, num_capsules=96, num_routes=16 * 47, in_channels=12, out_channels=16):
         super(DigitCaps, self).__init__()
 
         self.in_channels = in_channels
@@ -76,8 +76,12 @@ class DigitCaps(nn.Module):
         x = torch.stack([x] * self.num_capsules, dim=2).unsqueeze(4)
         W = torch.cat([self.W] * batch_size, dim=0)
         u_hat = torch.matmul(W, x)
+        del W
+        del x
         b_ij = Variable(torch.zeros(1, self.num_routes, self.num_capsules, 1))
-        b_ij.to(self.device)
+        if "cuda" in self.device.type:
+            u_hat = u_hat.cuda()
+            b_ij = b_ij.cuda()
 
         num_iterations = 3
         for iteration in range(num_iterations):
@@ -106,11 +110,11 @@ class Decoder(nn.Module):
         self.input_height = input_height
         self.input_channel = input_channel
         self.reconstraction_layers = nn.Sequential(
-            nn.Linear(16 * num_caps, 512),
+            nn.Linear(16 * num_caps, 512, device = device),
             nn.ReLU(inplace=True),
-            nn.Linear(512, 1024),
+            nn.Linear(512, 1024,device = device),
             nn.ReLU(inplace=True),
-            nn.Linear(1024, self.input_height * self.input_channel),
+            nn.Linear(1024, self.input_height * self.input_channel,device = device),
             nn.Sigmoid()
         )
         self.device = device
@@ -120,10 +124,11 @@ class Decoder(nn.Module):
         # classes = F.softmax(classes, dim=0)
         # _, max_length_indices = classes.max(dim=1)
         # masked = Variable(torch.sparse.torch.eye(self.num_caps))
-        masked = torch.zeros_like(classes)
+        masked = torch.zeros_like(classes, device=self.device)
         indices = classes.gt(th)
         masked[indices] = 1
-        masked.to(self.device)
+        if "cuda" in self.device.type:
+            masked = masked.cuda()
         # masked = masked.index_select(dim=0, index=Variable(max_length_indices.squeeze(1).data))
         masked = masked.squeeze(-1)
         t = (x * masked[:, :, None, None]).view(x.size(0), -1)
