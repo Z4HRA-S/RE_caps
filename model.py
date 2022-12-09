@@ -28,7 +28,11 @@ class Model(nn.Module):
 
         feature_set, labels = self.extract_feature(embedded_doc, x)
         # output = [self.caps_net(feature_set[i:i + 20]) for i in range(0, len(feature_set), 20)]
+        if torch.any(torch.isnan(feature_set)):
+            print("feature_set is nan")
         output, reconstructions, pred = self.caps_net(feature_set)
+        if torch.any(torch.isnan(output)):
+            print("output is nan")
         loss = self.caps_net.loss(feature_set, output, labels, reconstructions)
 
         return loss, pred, labels

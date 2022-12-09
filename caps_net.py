@@ -167,18 +167,18 @@ class CapsNet(nn.Module):
         loss = labels * left + 0.5 * (1.0 - labels) * right
         loss = loss.sum(dim=1).mean()
 
-        if torch.any(torch.isnan(loss)):
+        """if torch.any(torch.isnan(loss)):
             print("margin_loss:",
                   f"v_c is nan:{torch.any(torch.isnan(v_c))}",
                   f"left is nan:{torch.any(torch.isnan(left))}",
-                  f"right is nan:{torch.any(torch.isnan(right))}", )
+                  f"right is nan:{torch.any(torch.isnan(right))}", )"""
 
         return loss
 
     def reconstruction_loss(self, data, reconstructions):
         loss = self.mse_loss(reconstructions.view(reconstructions.size(0), -1), data.view(reconstructions.size(0), -1))
-        if torch.any(torch.isnan(loss)):
+        """if torch.any(torch.isnan(loss)):
             print("reconstruction_loss:",
                   f"reconstruction is nan:{torch.any(torch.isnan(reconstructions))}",
-                  f"data is nan:{torch.any(torch.isnan(data))}")
+                  f"data is nan:{torch.any(torch.isnan(data))}")"""
         return loss * 0.0005
