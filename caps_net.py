@@ -3,6 +3,20 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
+import sys
+
+
+def squash(input_tensor):
+    if torch.any(torch.isnan(input_tensor)):
+        print("input nan")
+    original_size = input_tensor.size()
+    input_tensor = input_tensor.squeeze()
+    norm = torch.linalg.norm(input_tensor, dim=-1).unsqueeze(dim=-1)
+    output = (norm ** 2) / (1 + (norm ** 2)) * (input_tensor / norm)
+    output = output.view(original_size)
+    if torch.any(torch.isnan(output)):
+        print("output nan")
+    return output
 
 
 class ConvLayer(nn.Module):
@@ -26,9 +40,9 @@ class ConvLayer(nn.Module):
                                )
 
     def forward(self, x):
-        output = F.relu(self.conv1(x))
-        output = F.relu(self.conv2(output))
-        output = F.relu(self.conv3(output))
+        output = F.leaky_relu(self.conv1(x))
+        output = F.leaky_relu(self.conv2(output))
+        output = F.leaky_relu(self.conv3(output))
         return output
 
 
@@ -38,7 +52,7 @@ class PrimaryCaps(nn.Module):
         capsule = torch.nn.Sequential(
             torch.nn.Conv1d(in_channels=in_channels, out_channels=out_channels,
                             kernel_size=1, stride=1, padding=0),
-            torch.nn.ReLU(),
+            torch.nn.LeakyReLU(),
             torch.nn.Conv1d(in_channels=out_channels, out_channels=out_channels,
                             kernel_size=kernel_size, stride=3, padding=0)
         )
@@ -52,13 +66,13 @@ class PrimaryCaps(nn.Module):
         u = [capsule(x) for capsule in self.capsules]
         u = torch.stack(u, dim=1)
         u = u.view(x.size(0), 16 * 47, -1)
-        u = self.squash(u)
+        u = squash(u)
         return u
 
-    def squash(self, input_tensor):
+    """def squash(self, input_tensor):
         squared_norm = (input_tensor ** 2).sum(-1, keepdim=True)
         output_tensor = squared_norm * input_tensor / ((1. + squared_norm) * torch.sqrt(squared_norm))
-        return output_tensor
+        return output_tensor"""
 
 
 class DigitCaps(nn.Module):
@@ -88,7 +102,7 @@ class DigitCaps(nn.Module):
             c_ij = F.softmax(b_ij, dim=1)
             c_ij = torch.cat([c_ij] * batch_size, dim=0).unsqueeze(4)
             s_j = (c_ij * u_hat).sum(dim=1, keepdim=True)
-            v_j = self.squash(s_j)
+            v_j = squash(s_j)
 
             if iteration < num_iterations - 1:
                 a_ij = torch.matmul(u_hat.transpose(3, 4), torch.cat([v_j] * self.num_routes, dim=1))
@@ -97,10 +111,13 @@ class DigitCaps(nn.Module):
         v_ij = v_j.squeeze(1)
         return v_ij
 
-    def squash(self, input_tensor):
+    """def squash(self, input_tensor):
+        print(input_tensor.size())
         squared_norm = (input_tensor ** 2).sum(-1, keepdim=True)
+        print("squred_norm", squared_norm.size())
         output_tensor = squared_norm * input_tensor / ((1. + squared_norm) * torch.sqrt(squared_norm))
-        return output_tensor
+        print(output_tensor.size())
+        return output_tensor"""
 
 
 class Decoder(nn.Module):
@@ -110,11 +127,11 @@ class Decoder(nn.Module):
         self.input_height = input_height
         self.input_channel = input_channel
         self.reconstraction_layers = nn.Sequential(
-            nn.Linear(16 * num_caps, 512, device = device),
-            nn.ReLU(inplace=True),
-            nn.Linear(512, 1024,device = device),
-            nn.ReLU(inplace=True),
-            nn.Linear(1024, self.input_height * self.input_channel,device = device),
+            nn.Linear(16 * num_caps, 512, device=device),
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(512, 1024, device=device),
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(1024, self.input_height * self.input_channel, device=device),
             nn.Sigmoid()
         )
         self.device = device
@@ -155,7 +172,8 @@ class CapsNet(nn.Module):
         return output, reconstructions, masked
 
     def loss(self, data, x, target, reconstructions):
-        return self.margin_loss(x, target) + self.reconstruction_loss(data, reconstructions)
+        total_loss = self.margin_loss(x, target) + self.reconstruction_loss(data, reconstructions)
+        return total_loss
 
     def margin_loss(self, x, labels, size_average=True):
         batch_size = x.size(0)
@@ -166,19 +184,8 @@ class CapsNet(nn.Module):
         right = F.relu(v_c - self.th).view(batch_size, -1)
         loss = labels * left + 0.5 * (1.0 - labels) * right
         loss = loss.sum(dim=1).mean()
-
-        """if torch.any(torch.isnan(loss)):
-            print("margin_loss:",
-                  f"v_c is nan:{torch.any(torch.isnan(v_c))}",
-                  f"left is nan:{torch.any(torch.isnan(left))}",
-                  f"right is nan:{torch.any(torch.isnan(right))}", )"""
-
         return loss
 
     def reconstruction_loss(self, data, reconstructions):
         loss = self.mse_loss(reconstructions.view(reconstructions.size(0), -1), data.view(reconstructions.size(0), -1))
-        """if torch.any(torch.isnan(loss)):
-            print("reconstruction_loss:",
-                  f"reconstruction is nan:{torch.any(torch.isnan(reconstructions))}",
-                  f"data is nan:{torch.any(torch.isnan(data))}")"""
         return loss * 0.0005
