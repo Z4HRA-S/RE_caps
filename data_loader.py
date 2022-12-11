@@ -9,7 +9,6 @@ from copy import deepcopy
 max_ent = 42
 max_lbl = 151
 
-
 class DocRED(Dataset):
     def __init__(self, data_path, num_class):
         self.num_class = num_class
@@ -27,7 +26,7 @@ class DocRED(Dataset):
     def __read_data__(self, data_dir: "str"):
         with open(data_dir, "r") as file:
             data = json.loads(file.read())
-        if self.num_class == 95:
+        if self.num_class == 96:
             data = [d for d in data if len(d["labels"]) > 0]
         rel2id_dir = "/".join(data_dir.split("/")[:-1] + ["rel2id.json"])
         with open(rel2id_dir, "r") as file:
@@ -63,14 +62,14 @@ class DocRED(Dataset):
         vertexSet = [[mnt["pos"] for mnt in ent] for ent in doc["vertexSet"]]
 
         labels = torch.zeros(len(vertexSet), len(vertexSet), self.num_class)
-        if self.num_class == 96:
+        if self.num_class == 97:
             labels[:, :, 0] = 1
 
         for triple in doc["labels"]:
             i, j, k = triple["h"], triple["t"], self.rel2id[triple["r"]]
-            if self.num_class == 96:
+            if self.num_class == 97:
                 labels[i][j][0] = 0
-            if self.num_class == 95:
+            if self.num_class == 96:
                 k = max(0, k - 1)
             labels[i][j][k] = 1
 
