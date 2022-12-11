@@ -2,7 +2,7 @@ import torch
 import transformers as ppb
 from torch import nn
 from itertools import product
-from caps_net import CapsNet
+#from caps_net import CapsNet
 
 
 class Model(nn.Module):
@@ -28,13 +28,8 @@ class Model(nn.Module):
 
         feature_set, labels = self.extract_feature(embedded_doc, x)
         # output = [self.caps_net(feature_set[i:i + 20]) for i in range(0, len(feature_set), 20)]
-        if torch.any(torch.isnan(feature_set)):
-            print("feature_set is nan")
         output, reconstructions, pred = self.caps_net(feature_set)
-        if torch.any(torch.isnan(output)):
-            print("output is nan")
         loss = self.caps_net.loss(feature_set, output, labels, reconstructions)
-
         return loss, pred, labels
 
     def extract_feature(self, embedded_doc, x):
@@ -47,10 +42,10 @@ class Model(nn.Module):
 
         for i, entities_embedding in enumerate(entity_list):
             label = x["label"][i].to(self.device)
-            if self.num_class == 96:
+            if self.num_class == 97:
                 all_possible_ent_pair = self.all_possible_pair(len(entities_embedding))
 
-            if self.num_class == 95:
+            if self.num_class == 96:
                 all_possible_ent_pair = self.labeled_pair(label)
 
             feature_set.extend(
@@ -87,6 +82,7 @@ class Model(nn.Module):
         :param embedded_doc_list: embedded doc in shape (batch, 512, 768)
         :return: The logsumexp pooling of mentions for each entity in shape(max_entity, 768)
         """
+        import sys
         batch = []
         for vertexSet, embedded_doc in zip(vertexSet_list, embedded_doc_list):
             # logsumexp = lambda x: torch.log(torch.sum(torch.exp(x), axis=0)).unsqueeze(0)
