@@ -5,13 +5,14 @@ from model import Model
 from train import train_loop, test_loop
 from data_loader import DocRED
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--epoch", default="30", type=int)
-    parser.add_argument("--lr", default="0.01", type=float)
+    parser.add_argument("--lr", default="0.0001", type=float)
     parser.add_argument("--batch-size", default="3", type=int)
     parser.add_argument("--num_class", default="96", type=int)
-    parser.add_argument("--device", default="cpu", type=str)
+    parser.add_argument("--device", default="cuda:0", type=str)
     args = parser.parse_args([] if "__file__" not in globals() else None)
 
     device = torch.device(args.device)
@@ -29,7 +30,7 @@ if __name__ == "__main__":
 
     #####
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True, patience=15, min_lr=1e-6)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True, patience=1, min_lr=1e-6)
     #####
 
     for t in range(args.epoch):
