@@ -3,19 +3,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-import sys
 
 
 def squash(input_tensor):
-    if torch.any(torch.isnan(input_tensor)):
-        print("input nan")
     original_size = input_tensor.size()
     input_tensor = input_tensor.squeeze()
     norm = torch.linalg.norm(input_tensor, dim=-1).unsqueeze(dim=-1)
     output = (norm ** 2) / (1 + (norm ** 2)) * (input_tensor / norm)
     output = output.view(original_size)
-    if torch.any(torch.isnan(output)):
-        print("output nan")
     return output
 
 
@@ -82,16 +77,17 @@ class DigitCaps(nn.Module):
         self.in_channels = in_channels
         self.num_routes = num_routes
         self.num_capsules = num_capsules
-        self.W = nn.Parameter(torch.randn(1, num_routes, num_capsules, out_channels, in_channels))
+        self.W = nn.Parameter(torch.randn(num_routes, num_capsules, out_channels, in_channels))
         self.device = device
 
     def forward(self, x):
         batch_size = x.size(0)
-        x = torch.stack([x] * self.num_capsules, dim=2).unsqueeze(4)
-        W = torch.cat([self.W] * batch_size, dim=0)
-        u_hat = torch.matmul(W, x)
-        del W
-        del x
+        # x = torch.stack([x] * self.num_capsules, dim=2).unsqueeze(4)
+        # W = torch.cat([self.W] * batch_size, dim=0)
+        u_hat = torch.stack([torch.stack(
+            [torch.matmul(self.W[:, j, :, :], x[i].unsqueeze(-1))
+             for j in range(self.num_capsules)], dim=1)
+            for i in range(batch_size)])
         b_ij = Variable(torch.zeros(1, self.num_routes, self.num_capsules, 1))
         if "cuda" in self.device.type:
             u_hat = u_hat.cuda()
