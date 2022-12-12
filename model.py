@@ -2,7 +2,7 @@ import torch
 import transformers as ppb
 from torch import nn
 from itertools import product
-#from caps_net import CapsNet
+from caps_net import CapsNet
 
 
 class Model(nn.Module):
