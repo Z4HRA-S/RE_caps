@@ -4,7 +4,7 @@ import argparse
 from model import Model
 from train import train_loop, test_loop
 from data_loader import DocRED
-
+import os
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -16,6 +16,8 @@ if __name__ == "__main__":
     args = parser.parse_args([] if "__file__" not in globals() else None)
 
     device = torch.device(args.device)
+    model_path = "checkpoints/"
+    current_epoch = 0
 
     train_data = DocRED("dataset/train_annotated.json", args.num_class)
     test_data = DocRED("dataset/dev.json", args.num_class)
@@ -32,10 +34,29 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True, patience=1, min_lr=1e-6)
     #####
+    if os.path.exists(model_path):
+        if len(os.listdir(model_path)) > 0:
+            file_name = os.listdir(model_path)[-1]
+            checkpoint = torch.load(f"{model_path}{file_name}")
+            model.load_state_dict(checkpoint['model_state_dict'])
+            model.train()
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            scheduler.load_state_dict(checkpoint['scheduler'])
+            current_epoch = checkpoint['epoch']
+            loss = checkpoint['loss']
+    else:
+        os.mkdir(model_path)
 
-    for t in range(args.epoch):
-        print(f"Epoch {t + 1}\n-------------------------------")
-        train_loop(train_dataloader, model, optimizer)
+    for epoch in range(current_epoch, args.epoch):
+        print(f"Epoch {epoch + 1}\n-------------------------------")
+        train_loss = train_loop(train_dataloader, model, optimizer)
         test_loss = test_loop(test_dataloader, model)
         scheduler.step(test_loss)
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler': scheduler.state_dict(),
+            'loss': train_loss,
+        }, f"{model_path}{epoch}.pt")
     print("Done!")

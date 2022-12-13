@@ -6,7 +6,6 @@ def train_loop(dataloader, model, optimizer):
     for batch, data in enumerate(dataloader):
         # Compute prediction and loss
         loss, masked, labels = model(data)
-        f1 = model.f1_measure(masked, labels)
 
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
 
@@ -17,7 +16,8 @@ def train_loop(dataloader, model, optimizer):
 
         if batch % 100 == 0:
             loss, current = loss.item(), (batch + 1) * len(data)
-            print(f"loss: {loss:>7f} f1: {f1:>7f}  [{current:>5d}/{size:>5d}]")
+            print(f"loss: {loss:>7f} [{current:>5d}/{size:>5d}]")
+    return loss
 
 
 def test_loop(dataloader, model):
