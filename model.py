@@ -28,9 +28,10 @@ class Model(nn.Module):
 
         feature_set, labels = self.extract_feature(embedded_doc, x)
         # output = [self.caps_net(feature_set[i:i + 20]) for i in range(0, len(feature_set), 20)]
-        output, reconstructions, pred = self.caps_net(feature_set)
-        loss = self.caps_net.loss(feature_set, output, labels, reconstructions)
-        return loss, pred, labels
+        output = self.caps_net(feature_set)
+        # loss = self.caps_net.loss(feature_set, output, labels, reconstructions)
+        loss = self.caps_net.margin_loss(output, labels)
+        return loss, output, labels
 
     def extract_feature(self, embedded_doc, x):
         entities = x["entity_list"]
