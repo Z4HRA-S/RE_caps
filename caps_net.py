@@ -132,18 +132,15 @@ class Decoder(nn.Module):
         )
         self.device = device
 
-    def forward(self, x, data, th):
+    def forward(self, x, data):
         classes = torch.sqrt((x ** 2).sum(2))
-        # classes = F.softmax(classes, dim=0)
-        # _, max_length_indices = classes.max(dim=1)
-        # masked = Variable(torch.sparse.torch.eye(self.num_caps))
-        masked = torch.zeros_like(classes, device=self.device)
-        indices = classes.gt(th)
-        masked[indices] = 1
+        classes = F.softmax(classes, dim=0)
+
+        _, max_length_indices = classes.max(dim=1)
+        masked = Variable(torch.sparse.torch.eye(10))
         if "cuda" in self.device.type:
             masked = masked.cuda()
-        # masked = masked.index_select(dim=0, index=Variable(max_length_indices.squeeze(1).data))
-        masked = masked.squeeze(-1)
+        masked = masked.index_select(dim=0, index=Variable(max_length_indices.squeeze(1).data))
         t = (x * masked[:, :, None, None]).view(x.size(0), -1)
         reconstructions = self.reconstraction_layers(t)
         reconstructions = reconstructions.view(-1, self.input_channel, self.input_height)
@@ -151,33 +148,32 @@ class Decoder(nn.Module):
 
 
 class CapsNet(nn.Module):
-    def __init__(self, device, th=0.5, num_class=96):
+    def __init__(self, device, num_class=96):
         super(CapsNet, self).__init__()
         self.conv_layer = ConvLayer()
         self.primary_capsules = PrimaryCaps()
         self.decoder = Decoder(num_caps=num_class, device=device)
         self.digit_capsules = DigitCaps(num_capsules=num_class, device=device)
         self.mse_loss = nn.MSELoss()
-        self.th = th
 
     def forward(self, data):
         output = self.conv_layer(data)
         output = self.primary_capsules(output)
         output = self.digit_capsules(output)
-        reconstructions, masked = self.decoder(output, data, self.th)
+        reconstructions, masked = self.decoder(output, data)
         return output, reconstructions, masked
 
     def loss(self, data, x, target, reconstructions):
         total_loss = self.margin_loss(x, target) + self.reconstruction_loss(data, reconstructions)
         return total_loss
 
-    def margin_loss(self, x, labels, size_average=True):
+    def margin_loss(self, x, labels):
         batch_size = x.size(0)
 
         v_c = torch.sqrt((x ** 2).sum(dim=2, keepdim=True))
 
-        left = F.relu(self.th - v_c).view(batch_size, -1)
-        right = F.relu(v_c - self.th).view(batch_size, -1)
+        left = F.relu(0.9 - v_c).view(batch_size, -1)
+        right = F.relu(v_c - 0.1).view(batch_size, -1)
         loss = labels * left + 0.5 * (1.0 - labels) * right
         loss = loss.sum(dim=1).mean()
         return loss
