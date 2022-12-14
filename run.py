@@ -11,7 +11,7 @@ if __name__ == "__main__":
     parser.add_argument("--epoch", default="30", type=int)
     parser.add_argument("--lr", default="0.0001", type=float)
     parser.add_argument("--batch-size", default="3", type=int)
-    parser.add_argument("--num_class", default="96", type=int)
+    parser.add_argument("--use_negative", default=False, type=int)
     parser.add_argument("--device", default="cuda:0", type=str)
     args = parser.parse_args([] if "__file__" not in globals() else None)
 
@@ -19,15 +19,15 @@ if __name__ == "__main__":
     model_path = "checkpoints/"
     current_epoch = 0
 
-    train_data = DocRED("dataset/train_annotated.json", args.num_class)
-    test_data = DocRED("dataset/dev.json", args.num_class)
+    train_data = DocRED("dataset/train_annotated.json", args.use_negative)
+    test_data = DocRED("dataset/dev.json", args.use_negative)
 
     train_dataloader = DataLoader(train_data, batch_size=args.batch_size,
                                   shuffle=True, collate_fn=train_data.custom_collate_fn)
     test_dataloader = DataLoader(test_data, batch_size=args.batch_size,
                                  shuffle=True, collate_fn=test_data.custom_collate_fn)
 
-    model = Model(train_data.get_token_embedding(), num_class=args.num_class, device=device)
+    model = Model(train_data.get_token_embedding(), use_negative=args.use_negative, device=device)
     model.to(device)
 
     #####
