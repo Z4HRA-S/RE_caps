@@ -6,16 +6,16 @@ from caps_net import CapsNet
 
 
 class Model(nn.Module):
-    def __init__(self, len_tokenizer, num_class, device):
-        self.num_class = num_class
+    def __init__(self, len_tokenizer, device, use_negative=False):
+        self.use_negative = use_negative
         super(Model, self).__init__()
-        self.embedding_model = ppb.BertModel.from_pretrained("bert-base-uncased")
+        self.embedding_model = ppb.BertModel.from_pretrained("bert-base-uncased",
+                                                             hidden_dropout_prob=0.2)
         self.embedding_model.resize_token_embeddings(len_tokenizer)
         self.embedding_model.to(device)
-        self.caps_net = CapsNet(num_class=num_class, device=device)
+        self.caps_net = CapsNet(num_class=96, device=device)
         self.caps_net.to(device)
         self.device = device
-
 
     def forward(self, x):
         input_ids = x["input_ids"].to(self.device)
@@ -43,10 +43,9 @@ class Model(nn.Module):
 
         for i, entities_embedding in enumerate(entity_list):
             label = x["label"][i].to(self.device)
-            if self.num_class == 97:
+            if self.use_negative:
                 all_possible_ent_pair = self.all_possible_pair(len(entities_embedding))
-
-            if self.num_class == 96:
+            else:
                 all_possible_ent_pair = self.labeled_pair(label)
 
             feature_set.extend(
