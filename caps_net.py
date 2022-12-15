@@ -167,7 +167,7 @@ class CapsNet(nn.Module):
 
     def loss(self, data, logits, target, reconstructions):
         # total_loss = self.margin_loss(x, target) + self.reconstruction_loss(data, reconstructions)
-        total_loss = self.bce_loss(logits.gt(0.5).float(), target) + self.reconstruction_loss(data, reconstructions)
+        total_loss = self.bce_loss(logits, target) + self.reconstruction_loss(data, reconstructions)
         return total_loss
 
     def margin_loss(self, x, labels):
