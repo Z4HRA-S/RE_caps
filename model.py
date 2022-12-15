@@ -28,10 +28,9 @@ class Model(nn.Module):
 
         feature_set, labels = self.extract_feature(embedded_doc, x)
         # output = [self.caps_net(feature_set[i:i + 20]) for i in range(0, len(feature_set), 20)]
-        output = self.caps_net(feature_set)
-        # loss = self.caps_net.loss(feature_set, output, labels, reconstructions)
-        loss = self.caps_net.margin_loss(output, labels)
-        return loss, output, labels
+        logits,reconstructions, masked = self.caps_net(feature_set)
+        loss = self.caps_net.loss(feature_set, logits, labels, reconstructions)
+        return loss, masked, labels
 
     def extract_feature(self, embedded_doc, x):
         entities = x["entity_list"]
@@ -95,10 +94,3 @@ class Model(nn.Module):
             doc = torch.stack(doc)
             batch.append(doc)
         return batch
-
-    def f1_measure(self, pred, labels):
-        tp = torch.sum(torch.logical_and(pred, labels).float())
-        fn_fp = torch.sum(torch.logical_xor(pred, labels).float())
-        epsilon = torch.zeros_like(tp) + 1e-10
-        f1 = tp / (tp + (fn_fp / 2) + epsilon)
-        return f1.mean()
