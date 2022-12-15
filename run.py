@@ -54,11 +54,12 @@ if __name__ == "__main__":
         train_loss = train_loop(train_dataloader, model, optimizer,logger)
         test_loss = test_loop(test_dataloader, model, logger)
         scheduler.step(test_loss)
-        torch.save({
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'scheduler': scheduler.state_dict(),
-            'loss': train_loss,
-        }, f"{model_path}{epoch}.pt")
+        if epoch > 15:
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler': scheduler.state_dict(),
+                'loss': train_loss,
+            }, f"{model_path}{epoch}.pt")
     print("Done!")
