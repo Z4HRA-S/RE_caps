@@ -11,7 +11,7 @@ from sklearn.metrics import f1_score
     return max_f1, max_th"""
 
 
-def train_loop(dataloader, model, optimizer):
+def train_loop(dataloader, model, optimizer, logger):
     size = len(dataloader.dataset)
     epoch_pred = []
     epoch_label = []
@@ -30,15 +30,17 @@ def train_loop(dataloader, model, optimizer):
         epoch_pred.append(masked)
 
         if batch % 100 == 0:
+            logger.write(f"loss: {loss.item():>7f} [{(batch + 1) * len(data):>5d}/{size:>5d}]\n")
             print(f"loss: {loss.item():>7f} [{(batch + 1) * len(data):>5d}/{size:>5d}]")
     epoch_pred = torch.concat(epoch_pred).cpu()
     epoch_label = torch.concat(epoch_label).cpu()
     f1 = f1_score(epoch_label, epoch_pred, average=None)
+    logger.write(f"F1: {f1}\n")
     print(f"F1: {f1}")
     return loss
 
 
-def test_loop(dataloader, model):
+def test_loop(dataloader, model, logger):
     with torch.no_grad():
         test_pred = []
         test_label = []
@@ -56,4 +58,5 @@ def test_loop(dataloader, model):
         f1 = f1_score(test_label, test_pred, average=None)
 
     print(f"Test Error: \n F1: {f1},  loss: {test_loss:>8f} \n")
+    logger.write(f"Test Error: \n F1: {f1},  loss: {test_loss:>8f} \n")
     return loss

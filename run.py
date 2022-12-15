@@ -15,6 +15,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", default="cuda:0", type=str)
     args = parser.parse_args([] if "__file__" not in globals() else None)
 
+    logger = open("log.log", "a")
     device = torch.device(args.device)
     model_path = "checkpoints/"
     current_epoch = 0
@@ -49,8 +50,9 @@ if __name__ == "__main__":
 
     for epoch in range(current_epoch, args.epoch):
         print(f"Epoch {epoch + 1}\n-------------------------------")
-        train_loss = train_loop(train_dataloader, model, optimizer)
-        test_loss = test_loop(test_dataloader, model)
+        logger.write(f"Epoch {epoch + 1}\n-------------------------------\n")
+        train_loss = train_loop(train_dataloader, model, optimizer,logger)
+        test_loss = test_loop(test_dataloader, model, logger)
         scheduler.step(test_loss)
         torch.save({
             'epoch': epoch,
