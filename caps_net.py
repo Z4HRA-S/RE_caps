@@ -132,18 +132,12 @@ class Decoder(nn.Module):
         )
         self.device = device
 
-    def forward(self, x, data, th):
-        classes = torch.sqrt((x ** 2).sum(2))
-        # classes = F.softmax(classes, dim=0)
-        # _, max_length_indices = classes.max(dim=1)
-        # masked = Variable(torch.sparse.torch.eye(self.num_caps))
-        masked = torch.zeros_like(classes, device=self.device)
-        indices = classes.gt(th)
+    def forward(self, x, logits):
+        indices = logits.gt(0.5)
+        masked = torch.zeros_like(indices, device=self.device)
         masked[indices] = 1
         if "cuda" in self.device.type:
             masked = masked.cuda()
-        # masked = masked.index_select(dim=0, index=Variable(max_length_indices.squeeze(1).data))
-        masked = masked.squeeze(-1)
         t = (x * masked[:, :, None, None]).view(x.size(0), -1)
         reconstructions = self.reconstraction_layers(t)
         reconstructions = reconstructions.view(-1, self.input_channel, self.input_height)
@@ -158,17 +152,22 @@ class CapsNet(nn.Module):
         self.decoder = Decoder(num_caps=num_class, device=device)
         self.digit_capsules = DigitCaps(num_capsules=num_class, device=device)
         self.mse_loss = nn.MSELoss()
+        self.bce_loss = torch.nn.BCELoss()
         self.th = th
 
     def forward(self, data):
         output = self.conv_layer(data)
         output = self.primary_capsules(output)
         output = self.digit_capsules(output)
-        # reconstructions, masked = self.decoder(output, data, self.th)
-        return output#, reconstructions, masked
+        norms = output.squeeze().norm(dim=-1)
+        # norms are between 0 , 1 so we scale it for the sigmoid to be between -1 and +1
+        logits = torch.nn.Sigmoid()(2 * norms - 1)
+        reconstructions, masked = self.decoder(output, logits)
+        return logits, reconstructions, masked
 
-    def loss(self, data, x, target, reconstructions):
-        total_loss = self.margin_loss(x, target) + self.reconstruction_loss(data, reconstructions)
+    def loss(self, data, logits, target, reconstructions):
+        # total_loss = self.margin_loss(x, target) + self.reconstruction_loss(data, reconstructions)
+        total_loss = self.bce_loss(logits, target) + self.reconstruction_loss(data, reconstructions)
         return total_loss
 
     def margin_loss(self, x, labels):
