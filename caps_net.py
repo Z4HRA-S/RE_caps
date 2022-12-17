@@ -132,7 +132,10 @@ class Decoder(nn.Module):
         )
         self.device = device
 
-    def forward(self, x, logits):
+    def forward(self, x):
+        norms = x.squeeze().norm(dim=-1)
+        # norms are between 0 , 1 so we scale it for the sigmoid to be between -1 and +1
+        logits = torch.nn.Sigmoid()(2 * norms - 1)
         indices = logits.gt(0.5)
         masked = torch.zeros_like(indices, device=self.device)
         masked[indices] = 1
@@ -159,11 +162,8 @@ class CapsNet(nn.Module):
         output = self.conv_layer(data)
         output = self.primary_capsules(output)
         output = self.digit_capsules(output)
-        norms = output.squeeze().norm(dim=-1)
-        # norms are between 0 , 1 so we scale it for the sigmoid to be between -1 and +1
-        logits = torch.nn.Sigmoid()(2 * norms - 1)
-        reconstructions, masked = self.decoder(output, logits)
-        return logits, reconstructions, masked
+        reconstructions, masked = self.decoder(output)
+        return output, reconstructions, masked
 
     def loss(self, data, logits, target, reconstructions):
         total_loss = self.margin_loss(logits, target) + self.reconstruction_loss(data, reconstructions)
