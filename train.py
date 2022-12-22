@@ -1,39 +1,40 @@
 import torch
 import numpy as np
 from sklearn.metrics import f1_score
+from torch.cuda.amp import GradScaler, autocast
 
-"""def max_f1(logits, labels):
-    threshold = np.arange(0, 1, 0.001)[1:]
-    pred = [logits.gt(th).float() for th in threshold]
-    f1 = np.array([f1_score(labels, p, average=None) for p in pred])
-    max_f1 = f1.max(axis=0)
-    max_th = np.array([threshold[i] for i in f1.argmax(axis=0)])
-    return max_f1, max_th"""
+scaler = GradScaler(enabled=True)
 
 
-def train_loop(dataloader, model, optimizer, logger):
+def train_loop(dataloader, model, optimizer, logger, batch_size):
+    gradient_accumulations = 30
     size = len(dataloader.dataset)
     epoch_pred = []
     epoch_label = []
     for batch, data in enumerate(dataloader):
         # Compute prediction and loss
-        loss, masked, labels = model(data)
-
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+        with autocast():
+            output, labels = model(data)
+            loss = model.caps_net.margin_loss(output, labels)
 
         # Backpropagation
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        scaler.scale(loss / gradient_accumulations).backward()
+        if (batch + 1) % gradient_accumulations == 0:
+            logger.write(f"loss: {loss.item():>7f} [{(batch) * batch_size:>5d}/{size:>5d}]\n")
+            print(f"loss: {loss.item():>7f} [{(batch) * batch_size}/{size:>5d}]")
+
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad()
+
+        pred = model.get_pred(output)
 
         epoch_label.append(labels)
-        epoch_pred.append(masked)
+        epoch_pred.append(pred)
 
-        if batch % 100 == 0:
-            logger.write(f"loss: {loss.item():>7f} [{(batch + 1) * len(data):>5d}/{size:>5d}]\n")
-            print(f"loss: {loss.item():>7f} [{(batch + 1) * len(data):>5d}/{size:>5d}]")
     epoch_pred = torch.concat(epoch_pred).cpu()
     epoch_label = torch.concat(epoch_label).cpu()
+
     f1 = f1_score(epoch_label, epoch_pred, average=None)
     logger.write(f"F1: {f1}\n")
     print(f"F1: {f1}")
@@ -46,11 +47,13 @@ def test_loop(dataloader, model, logger):
         test_label = []
         test_loss = []
         for data in dataloader:
-            loss, masked, labels = model(data)
+            output, labels = model(data)
+            loss = model.caps_net.margin_loss(output, labels)
+            pred = model.get_pred(output)
 
             test_loss.append(loss)
             test_label.append(labels)
-            test_pred.append(masked)
+            test_pred.append(pred)
 
         test_pred = torch.concat(test_pred).cpu()
         test_label = torch.concat(test_label).cpu()
