@@ -33,7 +33,6 @@ if __name__ == "__main__":
 
     #####
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True, patience=1, min_lr=1e-6)
     #####
     if os.path.exists(model_path):
         if len(os.listdir(model_path)) > 0:
@@ -42,7 +41,6 @@ if __name__ == "__main__":
             model.load_state_dict(checkpoint['model_state_dict'])
             model.train()
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            scheduler.load_state_dict(checkpoint['scheduler'])
             current_epoch = checkpoint['epoch']
             loss = checkpoint['loss']
     else:
@@ -51,15 +49,13 @@ if __name__ == "__main__":
     for epoch in range(current_epoch, args.epoch):
         print(f"Epoch {epoch + 1}\n-------------------------------")
         logger.write(f"Epoch {epoch + 1}\n-------------------------------\n")
-        train_loss = train_loop(train_dataloader, model, optimizer,logger)
+        train_loss = train_loop(train_dataloader, model, optimizer, logger, args.batch_size)
         test_loss = test_loop(test_dataloader, model, logger)
-        scheduler.step(test_loss)
         if epoch > 15:
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
-                'scheduler': scheduler.state_dict(),
                 'loss': train_loss,
             }, f"{model_path}{epoch}.pt")
     print("Done!")

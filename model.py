@@ -27,10 +27,15 @@ class Model(nn.Module):
             output_attentions=True)
 
         feature_set, labels = self.extract_feature(embedded_doc, x)
-        # output = [self.caps_net(feature_set[i:i + 20]) for i in range(0, len(feature_set), 20)]
-        logits,reconstructions, masked = self.caps_net(feature_set)
-        loss = self.caps_net.loss(feature_set, logits, labels, reconstructions)
-        return loss, masked, labels
+        output = self.caps_net(feature_set)
+        return output, labels
+
+    def get_pred(self, output):
+        norms =output.squeeze().norm(dim=-1)
+        #indices=norms.max(dim=-1)[1]
+        #preds = torch.nn.functional.one_hot(indices,num_classes=96)
+        preds = norms.gt(0.5).float()
+        return preds
 
     def extract_feature(self, embedded_doc, x):
         entities = x["entity_list"]
@@ -81,10 +86,8 @@ class Model(nn.Module):
         :param embedded_doc_list: embedded doc in shape (batch, 512, 768)
         :return: The logsumexp pooling of mentions for each entity in shape(max_entity, 768)
         """
-        import sys
         batch = []
         for vertexSet, embedded_doc in zip(vertexSet_list, embedded_doc_list):
-            # logsumexp = lambda x: torch.log(torch.sum(torch.exp(x), axis=0)).unsqueeze(0)
             mention_positions = [list(filter(lambda x: x[0] <= 512 and x[1] <= 512, ent)) for ent in vertexSet]
             mention_positions = [list(filter(lambda x: len(x) > 0, mnt)) for mnt in mention_positions]
             mention_positions = list(filter(lambda x: len(x) > 0, mention_positions))

@@ -6,8 +6,6 @@ from typing import List, Dict
 import traceback
 from copy import deepcopy
 
-max_ent = 42
-max_lbl = 151
 
 class DocRED(Dataset):
     def __init__(self, data_path, use_negative=False):
@@ -54,7 +52,6 @@ class DocRED(Dataset):
         return tokenized_doc
 
     def __preprocess__(self, doc):
-        # doc = self.__add_special_entity_token__(doc)
         doc = self.__join_sents__(doc)
         tokenized_doc = self.__tokenize__(doc["sents"])
         input_ids = torch.squeeze(tokenized_doc["input_ids"], 1)

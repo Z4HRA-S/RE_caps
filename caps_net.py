@@ -4,6 +4,23 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+conv = {
+    "in_channel": 3,
+    "out_channel": 128
+}
+primary_caps = {
+    "in_channel": conv["out_channel"],
+    "out_channel": 8,
+    "num_caps": 20
+}
+
+digit_caps = {
+    "in_channel": primary_caps["num_caps"],
+    "out_channel": 16,
+    "num_caps": 96,
+    "num_route": 8 * 24
+}
+
 
 def squash(input_tensor):
     original_size = input_tensor.size()
@@ -15,35 +32,32 @@ def squash(input_tensor):
 
 
 class ConvLayer(nn.Module):
-    def __init__(self, in_channels=3, out_channels=256, kernel_size=24):
+    def __init__(self, in_channels=conv["in_channel"], out_channels=conv["out_channel"], kernel_size=9):
         super(ConvLayer, self).__init__()
 
         self.conv1 = nn.Conv1d(in_channels=in_channels,
                                out_channels=64,
                                kernel_size=kernel_size,
-                               stride=2
+                               stride=3
                                )
         self.conv2 = nn.Conv1d(in_channels=64,
                                out_channels=128,
                                kernel_size=kernel_size,
-                               stride=2
-                               )
-        self.conv3 = nn.Conv1d(in_channels=128,
-                               out_channels=out_channels,
-                               kernel_size=kernel_size,
-                               stride=1
+                               stride=3
                                )
 
     def forward(self, x):
         output = F.leaky_relu(self.conv1(x))
         output = F.leaky_relu(self.conv2(output))
-        output = F.leaky_relu(self.conv3(output))
         return output
 
 
 class PrimaryCaps(nn.Module):
-    def __init__(self, num_capsules=12, in_channels=256, out_channels=16, kernel_size=12):
+    def __init__(self, num_capsules=primary_caps["num_caps"],
+                 in_channels=primary_caps["in_channel"],
+                 out_channels=primary_caps["out_channel"], kernel_size=12):
         super(PrimaryCaps, self).__init__()
+
         capsule = torch.nn.Sequential(
             torch.nn.Conv1d(in_channels=in_channels, out_channels=out_channels,
                             kernel_size=1, stride=1, padding=0),
@@ -52,26 +66,24 @@ class PrimaryCaps(nn.Module):
                             kernel_size=kernel_size, stride=3, padding=0)
         )
         self.capsules = nn.ModuleList([
-            # nn.Conv1d(in_channels=in_channels, out_channels=out_channels,
-            # kernel_size=kernel_size, stride=2, padding=0)
             capsule
             for _ in range(num_capsules)])
 
     def forward(self, x):
         u = [capsule(x) for capsule in self.capsules]
+        num_route = u[0].size(-1) * u[0].size(-2)
         u = torch.stack(u, dim=1)
-        u = u.view(x.size(0), 16 * 47, -1)
+        u = u.view(x.size(0), num_route, -1)
         u = squash(u)
         return u
 
-    """def squash(self, input_tensor):
-        squared_norm = (input_tensor ** 2).sum(-1, keepdim=True)
-        output_tensor = squared_norm * input_tensor / ((1. + squared_norm) * torch.sqrt(squared_norm))
-        return output_tensor"""
-
 
 class DigitCaps(nn.Module):
-    def __init__(self, device, num_capsules=96, num_routes=16 * 47, in_channels=12, out_channels=16):
+    def __init__(self, device, num_capsules=digit_caps["num_caps"],
+                 num_routes=digit_caps["num_route"],
+                 in_channels=digit_caps["in_channel"],
+                 out_channels=digit_caps["out_channel"]):
+
         super(DigitCaps, self).__init__()
 
         self.in_channels = in_channels
@@ -82,12 +94,12 @@ class DigitCaps(nn.Module):
 
     def forward(self, x):
         batch_size = x.size(0)
-        # x = torch.stack([x] * self.num_capsules, dim=2).unsqueeze(4)
-        # W = torch.cat([self.W] * batch_size, dim=0)
+
         u_hat = torch.stack([torch.stack(
             [torch.matmul(self.W[:, j, :, :], x[i].unsqueeze(-1))
              for j in range(self.num_capsules)], dim=1)
             for i in range(batch_size)])
+
         b_ij = Variable(torch.zeros(1, self.num_routes, self.num_capsules, 1))
         if "cuda" in self.device.type:
             u_hat = u_hat.cuda()
@@ -107,80 +119,27 @@ class DigitCaps(nn.Module):
         v_ij = v_j.squeeze(1)
         return v_ij
 
-    """def squash(self, input_tensor):
-        print(input_tensor.size())
-        squared_norm = (input_tensor ** 2).sum(-1, keepdim=True)
-        print("squred_norm", squared_norm.size())
-        output_tensor = squared_norm * input_tensor / ((1. + squared_norm) * torch.sqrt(squared_norm))
-        print(output_tensor.size())
-        return output_tensor"""
-
-
-class Decoder(nn.Module):
-    def __init__(self, device, input_height=768, input_channel=3, num_caps=96):
-        super(Decoder, self).__init__()
-        self.num_caps = num_caps
-        self.input_height = input_height
-        self.input_channel = input_channel
-        self.reconstraction_layers = nn.Sequential(
-            nn.Linear(16 * num_caps, 512, device=device),
-            nn.LeakyReLU(inplace=True),
-            nn.Linear(512, 1024, device=device),
-            nn.LeakyReLU(inplace=True),
-            nn.Linear(1024, self.input_height * self.input_channel, device=device),
-            nn.Sigmoid()
-        )
-        self.device = device
-
-    def forward(self, x):
-        norms = x.squeeze().norm(dim=-1)
-        # norms are between 0 , 1 so we scale it for the sigmoid to be between -1 and +1
-        logits = torch.nn.Sigmoid()(2 * norms - 1)
-        indices = logits.gt(0.5)
-        masked = torch.zeros_like(indices, device=self.device)
-        masked[indices] = 1
-        if "cuda" in self.device.type:
-            masked = masked.cuda()
-        t = (x * masked[:, :, None, None]).view(x.size(0), -1)
-        reconstructions = self.reconstraction_layers(t)
-        reconstructions = reconstructions.view(-1, self.input_channel, self.input_height)
-        return reconstructions, masked
-
 
 class CapsNet(nn.Module):
-    def __init__(self, device, th=0.5, num_class=96):
+    def __init__(self, device, num_class=96):
         super(CapsNet, self).__init__()
         self.conv_layer = ConvLayer()
         self.primary_capsules = PrimaryCaps()
-        self.decoder = Decoder(num_caps=num_class, device=device)
-        self.digit_capsules = DigitCaps(num_capsules=num_class, device=device)
-        self.mse_loss = nn.MSELoss()
-        self.bce_loss = torch.nn.BCELoss()
-        self.th = th
+        self.digit_capsules = DigitCaps(device=device)
 
     def forward(self, data):
         output = self.conv_layer(data)
         output = self.primary_capsules(output)
         output = self.digit_capsules(output)
-        reconstructions, masked = self.decoder(output)
-        return output, reconstructions, masked
-
-    def loss(self, data, logits, target, reconstructions):
-        total_loss = self.margin_loss(logits, target) + self.reconstruction_loss(data, reconstructions)
-        # total_loss = self.bce_loss(logits, target) + self.reconstruction_loss(data, reconstructions)
-        return total_loss
+        return output
 
     def margin_loss(self, x, labels):
         batch_size = x.size(0)
 
         v_c = torch.sqrt((x ** 2).sum(dim=2, keepdim=True))
 
-        left = F.relu(0.9 - v_c).view(batch_size, -1)
-        right = F.relu(v_c - 0.1).view(batch_size, -1)
+        left = F.relu(0.5 - v_c).view(batch_size, -1)
+        right = F.relu(v_c - 0.5).view(batch_size, -1)
         loss = labels * left + 0.5 * (1.0 - labels) * right
         loss = loss.sum(dim=1).mean()
         return loss
-
-    def reconstruction_loss(self, data, reconstructions):
-        loss = self.mse_loss(reconstructions.view(reconstructions.size(0), -1), data.view(reconstructions.size(0), -1))
-        return loss * 0.0005
