@@ -35,7 +35,7 @@ def train_loop(dataloader, model, optimizer, logger, batch_size):
     epoch_pred = torch.concat(epoch_pred).cpu()
     epoch_label = torch.concat(epoch_label).cpu()
 
-    f1 = f1_score(epoch_label, epoch_pred, average=None)
+    f1 = f1_score(epoch_label, epoch_pred, average="weighted")
     logger.write(f"F1: {f1}\n")
     print(f"F1: {f1}")
     return loss
@@ -58,7 +58,7 @@ def test_loop(dataloader, model, logger):
         test_pred = torch.concat(test_pred).cpu()
         test_label = torch.concat(test_label).cpu()
         test_loss = torch.stack(test_loss).mean().cpu()
-        f1 = f1_score(test_label, test_pred, average=None)
+        f1 = f1_score(test_label, test_pred, average="weighted")
 
     print(f"Test Error: \n F1: {f1},  loss: {test_loss:>8f} \n")
     logger.write(f"Test Error: \n F1: {f1},  loss: {test_loss:>8f} \n")
