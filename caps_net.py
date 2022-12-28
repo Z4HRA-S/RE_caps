@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 conv = {
-    "in_channel": 3,
+    "in_channel": 4,
     "out_channel": 128
 }
 primary_caps = {
