@@ -89,34 +89,34 @@ class DigitCaps(nn.Module):
         self.in_channels = in_channels
         self.num_routes = num_routes
         self.num_capsules = num_capsules
-        self.W = nn.Parameter(torch.randn(num_routes, num_capsules, out_channels, in_channels))
+        self.W = nn.Parameter(torch.randn(num_capsules, in_channels, out_channels, num_routes))
         self.device = device
 
     def forward(self, x):
         batch_size = x.size(0)
+        x = x.transpose(-1, -2)
+        x = torch.stack([x] * self.num_capsules, dim=1).unsqueeze(-1)
+        u_hat = torch.stack(
+            [torch.matmul(self.W, x[i])
+             for i in range(batch_size)])
 
-        u_hat = torch.stack([torch.stack(
-            [torch.matmul(self.W[:, j, :, :], x[i].unsqueeze(-1))
-             for j in range(self.num_capsules)], dim=1)
-            for i in range(batch_size)])
-
-        b_ij = Variable(torch.zeros(1, self.num_routes, self.num_capsules, 1))
+        b_ij = Variable(torch.zeros(1, self.num_capsules, self.in_channels, 1))
         if "cuda" in self.device.type:
             u_hat = u_hat.cuda()
             b_ij = b_ij.cuda()
 
         num_iterations = 3
         for iteration in range(num_iterations):
-            c_ij = F.softmax(b_ij, dim=1)
-            c_ij = torch.cat([c_ij] * batch_size, dim=0).unsqueeze(4)
-            s_j = (c_ij * u_hat).sum(dim=1, keepdim=True)
+            c_ij = torch.nn.functional.softmax(b_ij, dim=1)
+            c_ij = torch.cat([c_ij] * batch_size, dim=0).unsqueeze(-1)
+            s_j = (c_ij * u_hat).sum(dim=2, keepdim=True)
             v_j = squash(s_j)
 
             if iteration < num_iterations - 1:
-                a_ij = torch.matmul(u_hat.transpose(3, 4), torch.cat([v_j] * self.num_routes, dim=1))
-                a_ij = a_ij.squeeze(4).mean(dim=0, keepdim=True)
+                a_ij = torch.matmul(torch.cat([v_j] * self.in_channels, dim=2).transpose(-1, -2), u_hat)
+                a_ij = a_ij.squeeze(-1).sum(0, keepdim=True)
                 b_ij = b_ij + a_ij
-        v_ij = v_j.squeeze(1)
+        v_ij = v_j.squeeze(2)
         return v_ij
 
 
