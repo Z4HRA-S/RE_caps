@@ -15,7 +15,7 @@ class Model(nn.Module):
         self.embedding_model.to(device)
         self.caps_net = CapsNet(num_class=96, device=device)
         self.caps_net.to(device)
-        #self.lstm = torch.nn.LSTM(768, 384, 2, bidirectional=True, device=device)
+        # self.lstm = torch.nn.LSTM(768, 384, 3, bidirectional=True, device=device)
         self.device = device
 
     def forward(self, x):
@@ -28,8 +28,8 @@ class Model(nn.Module):
             output_attentions=True)
 
         feature_set, labels = self.extract_feature(embedded_doc, x)
-        #output, (hn, cn) = self.lstm(feature_set)
-        output = self.caps_net(feature_set)
+        # output, (hn, cn) = self.lstm(feature_set)
+        output = torch.concat([self.caps_net(feature_set[i:i+600]) for i in range(0, feature_set.size(0), 600)])
         return output, labels
 
     def get_pred(self, output):
