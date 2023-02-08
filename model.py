@@ -3,6 +3,7 @@ import transformers as ppb
 from torch import nn
 from itertools import product
 from caps_net import CapsNet
+from random import shuffle
 
 
 class Model(nn.Module):
@@ -29,7 +30,7 @@ class Model(nn.Module):
 
         feature_set, labels = self.extract_feature(embedded_doc, x)
         # output, (hn, cn) = self.lstm(feature_set)
-        output = torch.concat([self.caps_net(feature_set[i:i+600]) for i in range(0, feature_set.size(0), 600)])
+        output = torch.concat([self.caps_net(feature_set[i:i + 600]) for i in range(0, feature_set.size(0), 600)])
         return output, labels
 
     def get_pred(self, output):
@@ -65,7 +66,7 @@ class Model(nn.Module):
                     for h, t in all_possible_ent_pair]
             )
 
-            labels.extend([label[i][j] for i, j in all_possible_ent_pair])
+            labels.extend([label[k][j] for k, j in all_possible_ent_pair])
         feature_set = torch.stack(feature_set).to(self.device)
         labels = torch.stack(labels)
         return feature_set, labels
@@ -80,6 +81,12 @@ class Model(nn.Module):
     def labeled_pair(self, labels):
         num_ent = labels.size()[0]
         labeled = [(i, j) for i in range(num_ent) for j in range(num_ent) if torch.sum(labels[i][j]) > 0]
+        un_labeled = list(filter(lambda x: x[1] != x[0], product(range(num_ent), range(num_ent))))
+        un_labeled = list(filter(lambda x: x not in labeled, un_labeled))
+        shuffle(un_labeled)
+        num_unlabeled = int(len(labeled) / 2)
+        labeled.extend(un_labeled[:num_unlabeled])
+        shuffle(labeled)
         return labeled
 
     def aggregate_entities(self, vertexSet_list: list, embedded_doc_list):
@@ -98,11 +105,11 @@ class Model(nn.Module):
             context = [
                 torch.mean(
                     torch.matmul(
-                        torch.concat([attention[pos[0] + 1:pos[1] + 1] for pos in mnt]), embedded_doc),
+                        torch.concat([attention[pos[0] + 1].unsqueeze(dim=0) for pos in mnt], dim=0), embedded_doc),
                     dim=0)
                 for mnt in mention_positions]
             #  doc contains aggregated entity embedding, in shape(ent, 768)
-            doc = [torch.logsumexp(torch.concat([embedded_doc[pos[0] + 1:pos[1] + 1] for pos in mnt]), dim=0)
+            doc = [torch.logsumexp(torch.concat([embedded_doc[pos[0] + 1].unsqueeze(dim=0) for pos in mnt], dim=0), dim=0)
                    for mnt in mention_positions]
 
             doc = torch.stack(doc)
@@ -111,3 +118,4 @@ class Model(nn.Module):
             context = torch.stack(context)
             context_att.append(context)
         return batch, context_att
+
