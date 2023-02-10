@@ -35,9 +35,11 @@ def train_loop(dataloader, model, optimizer, logger, batch_size):
     epoch_pred = torch.concat(epoch_pred).cpu()
     epoch_label = torch.concat(epoch_label).cpu()
 
-    f1 = f1_score(epoch_label, epoch_pred, average="weighted")
-    logger.write(f"F1: {f1}\n")
-    print(f"F1: {f1}")
+    micro = f1_score(epoch_label, epoch_pred, average="micro")
+    macro = f1_score(epoch_label, epoch_pred, average="macro")
+    weighted = f1_score(epoch_label, epoch_pred, average="weighted")
+    logger.write(f"F1: micro: {micro}, macro: {macro}, weighted: {weighted}\n")
+    print(f"F1: micro: {micro}, macro: {macro}, weighted: {weighted}\n")
     return loss
 
 
@@ -47,7 +49,7 @@ def test_loop(dataloader, model, logger):
         test_label = []
         test_loss = []
         for data in dataloader:
-            output, labels = model(data)
+            output, labels = model(data, test=True)
             loss = model.caps_net.margin_loss(output, labels)
             pred = model.get_pred(output)
 
@@ -59,7 +61,12 @@ def test_loop(dataloader, model, logger):
         test_label = torch.concat(test_label).cpu()
         test_loss = torch.stack(test_loss).mean().cpu()
         f1 = f1_score(test_label, test_pred, average="weighted")
+        micro = f1_score(test_label, test_pred, average="micro")
+        macro = f1_score(test_label, test_pred, average="macro")
+        weighted = f1_score(test_label, test_pred, average="weighted")
+        logger.write(f"F1: micro: {micro}, macro: {macro}, weighted: {weighted}\n")
+        print(f"F1: micro: {micro}, macro: {macro}, weighted: {weighted}\n")
 
-    print(f"Test Error: \n F1: {f1},  loss: {test_loss:>8f} \n")
-    logger.write(f"Test Error: \n F1: {f1},  loss: {test_loss:>8f} \n")
+    print(f"loss: {test_loss:>8f} \n")
+    logger.write(f"loss: {test_loss:>8f} \n")
     return loss
