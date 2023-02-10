@@ -48,6 +48,9 @@ class Model(nn.Module):
         feature_set = []
         labels = []
 
+        get_local_context = lambda h, t, i: torch.logsumexp(torch.stack(
+            [h * t] * 768, dim=1) * embedded_doc.last_hidden_state[i], dim=0).squeeze()
+
         for i, (entities_embedding, attention_vector) in enumerate(zip(entity_list, attentions)):
             label = x["label"][i].to(self.device)
             if self.use_negative or test:
@@ -65,7 +68,7 @@ class Model(nn.Module):
                         cls_tokens[i],
                         entities_embedding[h],
                         entities_embedding[t],
-                        attention_vector[h] * attention_vector[t]
+                        get_local_context(attention_vector[h], attention_vector[t], i)
                     ])
                     for h, t in all_possible_ent_pair]
             )
@@ -107,14 +110,14 @@ class Model(nn.Module):
             mention_positions = list(filter(lambda x: len(x) > 0, mention_positions))
 
             context = [
-                torch.mean(
-                    torch.matmul(
-                        torch.concat([attention[pos[0] + 1].unsqueeze(dim=0) for pos in mnt], dim=0), embedded_doc),
+                torch.logsumexp(
+                    torch.concat([attention[pos[0] + 1].unsqueeze(dim=0) for pos in mnt], dim=0),
                     dim=0)
                 for mnt in mention_positions]
             #  doc contains aggregated entity embedding, in shape(ent, 768)
-            doc = [torch.logsumexp(torch.concat([embedded_doc[pos[0] + 1].unsqueeze(dim=0) for pos in mnt], dim=0), dim=0)
-                   for mnt in mention_positions]
+            doc = [
+                torch.logsumexp(torch.concat([embedded_doc[pos[0] + 1].unsqueeze(dim=0) for pos in mnt], dim=0), dim=0)
+                for mnt in mention_positions]
 
             doc = torch.stack(doc)
             batch.append(doc)
@@ -122,4 +125,3 @@ class Model(nn.Module):
             context = torch.stack(context)
             context_att.append(context)
         return batch, context_att
-
