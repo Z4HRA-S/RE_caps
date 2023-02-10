@@ -19,7 +19,7 @@ class Model(nn.Module):
         # self.lstm = torch.nn.LSTM(768, 384, 3, bidirectional=True, device=device)
         self.device = device
 
-    def forward(self, x):
+    def forward(self, x, test=False):
         input_ids = x["input_ids"].to(self.device)
         attention_mask = x["attention_mask"].to(self.device)
 
@@ -28,7 +28,7 @@ class Model(nn.Module):
             attention_mask=attention_mask,
             output_attentions=True)
 
-        feature_set, labels = self.extract_feature(embedded_doc, x)
+        feature_set, labels = self.extract_feature(embedded_doc, x, test)
         # output, (hn, cn) = self.lstm(feature_set)
         output = torch.concat([self.caps_net(feature_set[i:i + 600]) for i in range(0, feature_set.size(0), 600)])
         return output, labels
@@ -40,7 +40,7 @@ class Model(nn.Module):
         preds = norms.gt(0.5).float()
         return preds
 
-    def extract_feature(self, embedded_doc, x):
+    def extract_feature(self, embedded_doc, x, test):
         entities = x["entity_list"]
         entity_list, attentions = self.aggregate_entities(entities, embedded_doc)
         cls_tokens = embedded_doc.last_hidden_state[:, 0]
@@ -50,10 +50,14 @@ class Model(nn.Module):
 
         for i, (entities_embedding, attention_vector) in enumerate(zip(entity_list, attentions)):
             label = x["label"][i].to(self.device)
-            if self.use_negative:
+            if self.use_negative or test:
                 all_possible_ent_pair = self.all_possible_pair(len(entities_embedding))
             else:
                 all_possible_ent_pair = self.labeled_pair(label)
+
+            all_possible_ent_pair = list(
+                filter(lambda item: item[0] < len(entities_embedding) and item[1] < len(entities_embedding),
+                       all_possible_ent_pair))
 
             feature_set.extend(
                 [
