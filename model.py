@@ -6,6 +6,14 @@ from caps_net import CapsNet
 from random import shuffle
 
 
+class BinaryClassifier(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        pass
+
+
 class Model(nn.Module):
     def __init__(self, len_tokenizer, device, use_negative=False):
         self.use_negative = use_negative
@@ -16,7 +24,7 @@ class Model(nn.Module):
         self.embedding_model.to(device)
         self.caps_net = CapsNet(num_class=96, device=device)
         self.caps_net.to(device)
-        # self.lstm = torch.nn.LSTM(768, 384, 3, bidirectional=True, device=device)
+        # self.type_embedding = nn.Linear(6, 768, device=device)
         self.device = device
 
     def forward(self, x, test=False):
@@ -28,8 +36,9 @@ class Model(nn.Module):
             attention_mask=attention_mask,
             output_attentions=True)
 
-        feature_set, labels = self.extract_feature(embedded_doc, x, test)
-        # output, (hn, cn) = self.lstm(feature_set)
+        feature_set, labels, ent_types = self.extract_feature(embedded_doc, x, test)
+        # ent_types = self.type_embedding(ent_types)
+        feature_set = torch.concat([feature_set, ent_types.unsqueeze(1)], dim=1)
         output = torch.concat([self.caps_net(feature_set[i:i + 600]) for i in range(0, feature_set.size(0), 600)])
         return output, labels
 
@@ -47,6 +56,7 @@ class Model(nn.Module):
 
         feature_set = []
         labels = []
+        types = []
 
         get_local_context = lambda h, t, i: torch.logsumexp(torch.stack(
             [h * t] * 768, dim=1) * embedded_doc.last_hidden_state[i], dim=0).squeeze()
@@ -73,10 +83,14 @@ class Model(nn.Module):
                     for h, t in all_possible_ent_pair]
             )
 
+            types.extend([[x["types"][i][h], x["types"][i][t]] for h, t in all_possible_ent_pair])
+
             labels.extend([label[k][j] for k, j in all_possible_ent_pair])
         feature_set = torch.stack(feature_set).to(self.device)
         labels = torch.stack(labels)
-        return feature_set, labels
+        types = nn.functional.one_hot(torch.Tensor(types).to(torch.int64), num_classes=6).sum(dim=-2).to(self.device)
+        types = nn.functional.pad(types, (0, 762))
+        return feature_set, labels, types
 
     def all_possible_pair(self, num_ent: int):
         return list(

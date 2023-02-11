@@ -96,7 +96,7 @@ class DocRED(Dataset):
         input_ids = torch.squeeze(tokenized_doc["input_ids"], 1)
         attention_mask = torch.squeeze(tokenized_doc["attention_mask"], 1)
         vertexSet = [[mnt["pos"] for mnt in ent] for ent in doc["vertexSet"]]
-        types = [ent[0]["type"] for ent in doc["vertexSet"]]
+        types = [types_id[ent[0]["type"]] for ent in doc["vertexSet"]]
 
         labels = torch.zeros(len(vertexSet), len(vertexSet), 96)
 
