@@ -14,8 +14,7 @@ def train_loop(dataloader, model, optimizer, logger, batch_size):
     for batch, data in enumerate(dataloader):
         # Compute prediction and loss
         with autocast():
-            output, labels = model(data)
-            loss = model.caps_net.margin_loss(output, labels)
+            pred, labels, loss = model(data)
 
         # Backpropagation
         scaler.scale(loss / gradient_accumulations).backward()
@@ -26,8 +25,6 @@ def train_loop(dataloader, model, optimizer, logger, batch_size):
             scaler.step(optimizer)
             scaler.update()
             optimizer.zero_grad()
-
-        pred = model.get_pred(output)
 
         epoch_label.append(labels)
         epoch_pred.append(pred)
@@ -49,9 +46,7 @@ def test_loop(dataloader, model, logger):
         test_label = []
         test_loss = []
         for data in dataloader:
-            output, labels = model(data, test=True)
-            loss = model.caps_net.margin_loss(output, labels)
-            pred = model.get_pred(output)
+            pred, labels, loss = model(data, test=True)
 
             test_loss.append(loss)
             test_label.append(labels)
