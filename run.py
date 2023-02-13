@@ -5,13 +5,14 @@ from model import Model
 from train import train_loop, test_loop
 from data_loader import DocRED
 import os
+import time
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--epoch", default="30", type=int)
     parser.add_argument("--lr", default="0.0001", type=float)
     parser.add_argument("--batch-size", default="3", type=int)
-    parser.add_argument("--use_negative", default=False, type=int)
+    parser.add_argument("--use_negative", default=True, type=int)
     parser.add_argument("--device", default="cuda:0", type=str)
     args = parser.parse_args([] if "__file__" not in globals() else None)
 
@@ -49,6 +50,7 @@ if __name__ == "__main__":
     for epoch in range(current_epoch, args.epoch):
         print(f"Epoch {epoch + 1}\n-------------------------------")
         logger.write(f"Epoch {epoch + 1}\n-------------------------------\n")
+        start = time.time()
         train_loss = train_loop(train_dataloader, model, optimizer, logger, args.batch_size)
         test_loss = test_loop(test_dataloader, model, logger)
         if epoch > 15:
@@ -58,4 +60,6 @@ if __name__ == "__main__":
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': train_loss,
             }, f"{model_path}{epoch}.pt")
+        end = time.time()
+        print(f"{(end - start)/60} minutes")
     print("Done!")
