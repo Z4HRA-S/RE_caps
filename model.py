@@ -36,19 +36,18 @@ class Model(nn.Module):
 
         bin_logits = self.bin_classifier(feature_set)
         feature_idx = bin_logits.squeeze().gt(0.5)
+        if not torch.all(feature_idx):
+            feature_idx[0] = True
 
         positive_feature_set = feature_set[feature_idx]
         predictions = torch.zeros_like(labels)
-
-        if len(positive_feature_set) == 0:
-            positive_feature_set = feature_set[:1]
 
         output = torch.concat([self.caps_net(positive_feature_set[i:i + 600])
                                for i in range(0, positive_feature_set.size(0), 600)])
         positive_labels = self.get_pred(output)
 
         caps_net_loss = self.caps_net.margin_loss(output, labels[feature_idx])
-        bin_classifier_loss = self.bin_classifier.loss_fuc(bin_logits,labels)
+        bin_classifier_loss = self.bin_classifier.loss_func(bin_logits, labels)
         loss = caps_net_loss + bin_classifier_loss
 
         predictions[feature_idx] = positive_labels
@@ -114,12 +113,12 @@ class Model(nn.Module):
     def labeled_pair(self, labels):
         num_ent = labels.size()[0]
         labeled = [(i, j) for i in range(num_ent) for j in range(num_ent) if torch.sum(labels[i][j]) > 0]
-        un_labeled = list(filter(lambda x: x[1] != x[0], product(range(num_ent), range(num_ent))))
+        """un_labeled = list(filter(lambda x: x[1] != x[0], product(range(num_ent), range(num_ent))))
         un_labeled = list(filter(lambda x: x not in labeled, un_labeled))
         shuffle(un_labeled)
         num_unlabeled = int(len(labeled) / 2)
         labeled.extend(un_labeled[:num_unlabeled])
-        shuffle(labeled)
+        shuffle(labeled)"""
         return labeled
 
     def aggregate_entities(self, vertexSet_list: list, embedded_doc_list):

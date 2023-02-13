@@ -16,5 +16,5 @@ class BinaryClassifier(nn.Module):
         output = self.classifier(output)
         return output
 
-    def loss_fuc(self, logits, labels):
+    def loss_func(self, logits, labels):
         return self.loss(logits.squeeze(), labels.any(dim=1).float())
