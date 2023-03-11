@@ -5,20 +5,20 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 conv = {
-    "in_channel": 5,
-    "out_channel": 128
+    "in_channel": 1,
+    "out_channel": 32
 }
 primary_caps = {
     "in_channel": conv["out_channel"],
     "out_channel": 8,
-    "num_caps": 20
+    "num_caps": 24
 }
 
 digit_caps = {
     "in_channel": primary_caps["num_caps"],
-    "out_channel": 16,
+    "out_channel": 8,
     "num_caps": 96,
-    "num_route": 8 * 24
+    "num_route": 20*8
 }
 
 
@@ -32,22 +32,15 @@ def squash(input_tensor):
 
 
 class ConvLayer(nn.Module):
-    def __init__(self, in_channels=conv["in_channel"], out_channels=conv["out_channel"], kernel_size=9):
+    def __init__(self, in_channels=conv["in_channel"], out_channels=conv["out_channel"]):
         super(ConvLayer, self).__init__()
-
-        self.conv1 = nn.Conv1d(in_channels=in_channels,
-                               out_channels=64,
-                               kernel_size=kernel_size,
-                               stride=3
-                               )
-        self.conv2 = nn.Conv1d(in_channels=64,
-                               out_channels=128,
-                               kernel_size=kernel_size,
-                               stride=3
-                               )
+        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
+                               kernel_size=(1, 6), stride=(1, 3))
+        self.conv2 = nn.Conv2d(in_channels=out_channels, out_channels=out_channels,
+                               kernel_size=(2, 8), stride=(2, 4))
 
     def forward(self, x):
-        output = F.leaky_relu(self.conv1(x))
+        output = F.leaky_relu(self.conv1(x.unsqueeze(1)))
         output = F.leaky_relu(self.conv2(output))
         return output
 
@@ -55,15 +48,17 @@ class ConvLayer(nn.Module):
 class PrimaryCaps(nn.Module):
     def __init__(self, num_capsules=primary_caps["num_caps"],
                  in_channels=primary_caps["in_channel"],
-                 out_channels=primary_caps["out_channel"], kernel_size=12):
+                 out_channels=primary_caps["out_channel"]):
         super(PrimaryCaps, self).__init__()
 
-        capsule = torch.nn.Sequential(
-            torch.nn.Conv1d(in_channels=in_channels, out_channels=out_channels,
-                            kernel_size=1, stride=1, padding=0),
-            torch.nn.LeakyReLU(),
-            torch.nn.Conv1d(in_channels=out_channels, out_channels=out_channels,
-                            kernel_size=kernel_size, stride=3, padding=0)
+        capsule = nn.Sequential(
+            # 32 * 2 * 94
+            nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
+                      kernel_size=(1, 1), stride=(1, 1), padding=0),
+            nn.LeakyReLU(),
+            nn.Conv2d(in_channels=out_channels, out_channels=out_channels,
+                      kernel_size=(2, 3), stride=(1, 3), padding=0)
+            # 8 * 1 * 31
         )
         self.capsules = nn.ModuleList([
             capsule
@@ -71,10 +66,9 @@ class PrimaryCaps(nn.Module):
 
     def forward(self, x):
         u = [capsule(x) for capsule in self.capsules]
-        num_route = u[0].size(-1) * u[0].size(-2)
         u = torch.stack(u, dim=1)
-        u = u.view(x.size(0), num_route, -1)
-        u = squash(u)
+        u = u.view(x.size(0), digit_caps["num_route"], primary_caps["num_caps"])
+        u = squash(u) # 160 * 24
         return u
 
 
@@ -132,6 +126,7 @@ class CapsNet(nn.Module):
     def forward(self, data):
         output = self.conv_layer(data)
         output = self.primary_capsules(output)
+        print(output.size())
         output = self.digit_capsules(output)
         return output
 
@@ -145,3 +140,10 @@ class CapsNet(nn.Module):
         loss = labels * left + 0.5 * (1.0 - labels) * right
         loss = loss.sum(dim=1).mean()
         return loss
+
+    def custom_loss(self, x, labels):
+        v_c = torch.sqrt((x ** 2).sum(dim=2, keepdim=True)).squeeze()
+        loss = torch.abs(1.0-(labels / (v_c + 1e-20))) + ((1.0 - labels) * v_c)**2
+        loss = loss.sum(dim=1).mean()
+        return loss
+

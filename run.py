@@ -10,13 +10,12 @@ import time
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--epoch", default="30", type=int)
-    parser.add_argument("--lr", default="0.0001", type=float)
+    parser.add_argument("--lr", default="0.00005", type=float)
     parser.add_argument("--batch-size", default="3", type=int)
-    parser.add_argument("--use_negative", default=True, type=int)
+    parser.add_argument("--use_negative", default=False, type=bool)
     parser.add_argument("--device", default="cuda:0", type=str)
     args = parser.parse_args([] if "__file__" not in globals() else None)
 
-    logger = open("log.log", "a")
     device = torch.device(args.device)
     model_path = "checkpoints/"
     current_epoch = 0
@@ -33,8 +32,12 @@ if __name__ == "__main__":
     model.to(device)
 
     #####
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    wd = 0.5
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=wd)
     #####
+    logger_name = f"Lr:{args.lr}, wd:{wd}, op:{type(optimizer)}"
+    logger = open(f"{logger_name}.log", "a")
+
     if os.path.exists(model_path):
         if len(os.listdir(model_path)) > 0:
             file_name = os.listdir(model_path)[-1]
@@ -59,7 +62,7 @@ if __name__ == "__main__":
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': train_loss,
-            }, f"{model_path}{epoch}.pt")
+            }, f"{model_path}.pt")
         end = time.time()
-        print(f"{(end - start)/60} minutes")
+        print(f"{(end - start) / 60} minutes")
     print("Done!")
